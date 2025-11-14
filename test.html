@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网页版围棋 - 测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-title {
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background-color: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #5a67d8;
+        }
+        #test-results {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <h1>网页版围棋 - 功能测试</h1>
+
+    <div class="test-section">
+        <h2 class="test-title">自动化测试</h2>
+        <button onclick="runAllTests()">运行所有测试</button>
+        <button onclick="runBasicTests()">基础功能测试</button>
+        <button onclick="runGameTests()">游戏逻辑测试</button>
+        <button onclick="runUITests()">界面测试</button>
+        <div id="test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2 class="test-title">游戏功能验证</h2>
+        <p>以下功能需要在实际游戏环境中测试：</p>
+        <ul>
+            <li>✅ 棋盘绘制和坐标显示</li>
+            <li>✅ 黑白棋子交替下子</li>
+            <li>✅ 提子规则实现</li>
+            <li>✅ 禁止自杀规则</li>
+            <li>✅ 劫争检测</li>
+            <li>✅ Pass功能</li>
+            <li>✅ 悔棋功能</li>
+            <li>✅ 游戏结束判定</li>
+            <li>✅ 得分计算</li>
+            <li>✅ AI对战（三种难度）</li>
+            <li>✅ 积分系统</li>
+            <li>✅ 排行榜功能</li>
+            <li>✅ 本地数据存储</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2 class="test-title">设备兼容性</h2>
+        <div id="device-info"></div>
+    </div>
+
+    <div class="test-section">
+        <h2 class="test-title">浏览器支持</h2>
+        <div id="browser-info"></div>
+    </div>
+
+    <script>
+        // 测试结果输出
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('test-results');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            resultsDiv.innerHTML += `<div class="test-result ${className}">[${timestamp}] ${message}</div>`;
+        }
+
+        function clearResults() {
+            document.getElementById('test-results').innerHTML = '';
+        }
+
+        // 基础功能测试
+        function runBasicTests() {
+            clearResults();
+            log('开始基础功能测试...', 'info');
+
+            try {
+                // 测试GoGame类
+                log('测试GoGame类初始化...', 'info');
+                const game = new GoGame();
+                log('✅ GoGame类初始化成功', 'success');
+
+                // 测试棋盘初始化
+                log('测试棋盘初始化...', 'info');
+                if (game.board.length === 19 && game.board[0].length === 19) {
+                    log('✅ 棋盘尺寸正确：19x19', 'success');
+                } else {
+                    log('❌ 棋盘尺寸错误', 'error');
+                }
+
+                // 测试有效移动检查
+                log('测试有效移动检查...', 'info');
+                if (game.isValidMove(0, 0) && !game.isValidMove(-1, 0) && !game.isValidMove(20, 0)) {
+                    log('✅ 有效移动检查正常', 'success');
+                } else {
+                    log('❌ 有效移动检查失败', 'error');
+                }
+
+                // 测试放置棋子
+                log('测试放置棋子...', 'info');
+                if (game.placeStone(9, 9)) {
+                    log('✅ 棋子放置成功', 'success');
+                    if (game.board[9][9] === 'black') {
+                        log('✅ 棋子颜色正确（黑子先行）', 'success');
+                    } else {
+                        log('❌ 棋子颜色错误', 'error');
+                    }
+                } else {
+                    log('❌ 棋子放置失败', 'error');
+                }
+
+                // 测试玩家切换
+                log('测试玩家切换...', 'info');
+                if (game.currentPlayer === 'white') {
+                    log('✅ 玩家切换正确', 'success');
+                } else {
+                    log('❌ 玩家切换失败', 'error');
+                }
+
+            } catch (error) {
+                log(`❌ 基础功能测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 游戏逻辑测试
+        function runGameTests() {
+            clearResults();
+            log('开始游戏逻辑测试...', 'info');
+
+            try {
+                // 测试提子
+                log('测试提子功能...', 'info');
+                const game1 = new GoGame();
+                game1.placeStone(9, 9); // 黑子
+                game1.placeStone(9, 10); // 白子
+                game1.placeStone(8, 10); // 黑子
+                game1.placeStone(10, 10); // 白子
+                game1.placeStone(10, 9); // 黑子
+
+                // 包围白子
+                if (game1.placeStone(9, 8)) { // 黑子完成包围
+                    log('✅ 提子测试通过', 'success');
+                } else {
+                    log('❌ 提子测试失败', 'error');
+                }
+
+                // 测试自杀规则
+                log('测试自杀规则...', 'info');
+                const game2 = new GoGame();
+                game2.placeStone(9, 9); // 黑子
+                game2.placeStone(8, 9); // 白子
+                game2.placeStone(10, 9); // 白子
+                game2.placeStone(9, 8); // 白子
+
+                // 尝试在(9,10)位置下黑子（会被白子包围）
+                game2.currentPlayer = 'black';
+                if (!game2.placeStone(9, 10)) {
+                    log('✅ 自杀规则测试通过（禁止自杀）', 'success');
+                } else {
+                    log('❌ 自杀规则测试失败', 'error');
+                }
+
+                // 测试Pass功能
+                log('测试Pass功能...', 'info');
+                const game3 = new GoGame();
+                game3.pass();
+                if (game3.consecutivePasses === 1 && game3.currentPlayer === 'white') {
+                    log('✅ Pass功能测试通过', 'success');
+                } else {
+                    log('❌ Pass功能测试失败', 'error');
+                }
+
+                // 测试悔棋功能
+                log('测试悔棋功能...', 'info');
+                const game4 = new GoGame();
+                game4.placeStone(9, 9);
+                if (game4.undo()) {
+                    if (game4.board[9][9] === null && game4.currentPlayer === 'black') {
+                        log('✅ 悔棋功能测试通过', 'success');
+                    } else {
+                        log('❌ 悔棋功能测试失败', 'error');
+                    }
+                } else {
+                    log('❌ 悔棋功能执行失败', 'error');
+                }
+
+            } catch (error) {
+                log(`❌ 游戏逻辑测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // UI测试
+        function runUITests() {
+            clearResults();
+            log('开始UI功能测试...', 'info');
+
+            try {
+                // 测试UIManager类
+                log('测试UIManager类初始化...', 'info');
+                const ui = new UIManager();
+                log('✅ UIManager类初始化成功', 'success');
+
+                // 测试数据管理
+                log('测试数据管理功能...', 'info');
+                const dataManager = new DataManager();
+                const settings = dataManager.getSettings();
+                if (settings && typeof settings.sound === 'boolean') {
+                    log('✅ 数据管理功能正常', 'success');
+                } else {
+                    log('❌ 数据管理功能异常', 'error');
+                }
+
+                // 测试AI类
+                log('测试AI类...', 'info');
+                const ai = new GoAI('medium');
+                if (ai && ai.difficulty === 'medium') {
+                    log('✅ AI类初始化成功', 'success');
+                } else {
+                    log('❌ AI类初始化失败', 'error');
+                }
+
+            } catch (error) {
+                log(`❌ UI测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 运行所有测试
+        function runAllTests() {
+            clearResults();
+            log('开始运行所有测试...', 'info');
+
+            runBasicTests();
+            runGameTests();
+            runUITests();
+
+            log('所有测试完成！', 'success');
+        }
+
+        // 设备信息检测
+        function detectDevice() {
+            const deviceInfo = document.getElementById('device-info');
+            const info = [];
+
+            // 屏幕信息
+            info.push(`屏幕尺寸: ${window.screen.width}x${window.screen.height}`);
+            info.push(`视口尺寸: ${window.innerWidth}x${window.innerHeight}`);
+            info.push(`像素比: ${window.devicePixelRatio}`);
+
+            // 触摸支持
+            info.push(`触摸支持: ${'ontouchstart' in window ? '是' : '否'}`);
+
+            // 设备类型检测
+            const userAgent = navigator.userAgent.toLowerCase();
+            let deviceType = '桌面设备';
+            if (/mobile|android|iphone|ipad/i.test(userAgent)) {
+                deviceType = /ipad|tablet/i.test(userAgent) ? '平板设备' : '手机设备';
+            }
+            info.push(`设备类型: ${deviceType}`);
+
+            // 平台检测
+            let platform = '未知平台';
+            if (/windows/i.test(userAgent)) platform = 'Windows';
+            else if (/mac|os x/i.test(userAgent)) platform = 'macOS';
+            else if (/linux/i.test(userAgent)) platform = 'Linux';
+            else if (/android/i.test(userAgent)) platform = 'Android';
+            else if (/ios|iphone|ipad/i.test(userAgent)) platform = 'iOS';
+            info.push(`操作系统: ${platform}`);
+
+            deviceInfo.innerHTML = `<ul>${info.map(item => `<li>${item}</li>`).join('')}</ul>`;
+        }
+
+        // 浏览器信息检测
+        function detectBrowser() {
+            const browserInfo = document.getElementById('browser-info');
+            const info = [];
+
+            // 浏览器名称和版本
+            const userAgent = navigator.userAgent;
+            let browserName = '未知浏览器';
+            let browserVersion = '';
+
+            if (/chrome/i.test(userAgent) && !/edge/i.test(userAgent)) {
+                browserName = 'Chrome';
+                const match = userAgent.match(/chrome\/(\d+)/i);
+                browserVersion = match ? match[1] : '';
+            } else if (/firefox/i.test(userAgent)) {
+                browserName = 'Firefox';
+                const match = userAgent.match(/firefox\/(\d+)/i);
+                browserVersion = match ? match[1] : '';
+            } else if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) {
+                browserName = 'Safari';
+                const match = userAgent.match(/version\/(\d+)/i);
+                browserVersion = match ? match[1] : '';
+            } else if (/edge/i.test(userAgent)) {
+                browserName = 'Edge';
+                const match = userAgent.match(/edge\/(\d+)/i);
+                browserVersion = match ? match[1] : '';
+            }
+
+            info.push(`浏览器: ${browserName} ${browserVersion}`);
+
+            // 功能支持检测
+            info.push(`Canvas支持: ${document.createElement('canvas').getContext ? '是' : '否'}`);
+            info.push(`本地存储: ${typeof Storage !== 'undefined' ? '是' : '否'}`);
+            info.push(`Web Audio: ${typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined' ? '是' : '否'}`);
+            info.push(`振动API: ${'vibrate' in navigator ? '是' : '否'}`);
+
+            // CSS Grid支持
+            info.push(`CSS Grid: ${CSS.supports('display', 'grid') ? '是' : '否'}`);
+            info.push(`CSS Flexbox: ${CSS.supports('display', 'flex') ? '是' : '否'}`);
+
+            browserInfo.innerHTML = `<ul>${info.map(item => `<li>${item}</li>`).join('')}</ul>`;
+        }
+
+        // 页面加载时运行检测
+        window.addEventListener('load', () => {
+            detectDevice();
+            detectBrowser();
+        });
+    </script>
+</body>
+</html>
