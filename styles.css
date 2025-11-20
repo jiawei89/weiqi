@@ -492,6 +492,89 @@ body {
     color: #666;
 }
 
+/* AI思考提示样式 */
+.ai-thinking {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 30px 40px;
+    border-radius: 15px;
+    z-index: 1000;
+    text-align: center;
+    min-width: 300px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.3s ease;
+}
+
+.ai-thinking-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.ai-thinking-icon {
+    font-size: 48px;
+    animation: pulse 1.5s infinite ease-in-out;
+}
+
+.ai-thinking-text {
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.ai-thinking-time {
+    font-size: 14px;
+    color: #ccc;
+}
+
+.ai-thinking-progress {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50, #8BC34A);
+    width: 0%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    animation: shimmer 2s infinite;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -45%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+@keyframes shimmer {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+}
+
 /* 游戏控制按钮 */
 .game-controls {
     background: white;

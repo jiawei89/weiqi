@@ -412,47 +412,114 @@ class GoAI {
         this.difficulty = difficulty;
         this.boardSize = 19;
         this.maxDepth = this.getMaxDepth();
+        this.maxTime = this.getMaxThinkingTime();
+        this.startTime = 0;
+        this.nodeCount = 0;
     }
 
     getMaxDepth() {
         switch (this.difficulty) {
-            case 'easy': return 1;
-            case 'medium': return 2;
-            case 'hard': return 3;
-            default: return 2;
+            case 'easy': return 2;
+            case 'medium': return 4;
+            case 'hard': return 6;
+            default: return 4;
         }
     }
 
-    // 获取AI的下一步
+    getMaxThinkingTime() {
+        // AI最大思考时间（毫秒）
+        switch (this.difficulty) {
+            case 'easy': return 500;
+            case 'medium': return 1500;
+            case 'hard': return 3000;
+            default: return 1500;
+        }
+    }
+
+    // 获取AI的下一步（性能优化版）
     getNextMove(game) {
+        this.startTime = Date.now();
+        this.nodeCount = 0;
+
         const validMoves = this.getValidMoves(game);
         if (validMoves.length === 0) return null;
 
+        // 如果没有时间限制或难度较低，直接使用原有方法
         switch (this.difficulty) {
             case 'easy':
                 return this.getRandomMove(validMoves);
             case 'medium':
                 return this.getMediumMove(game, validMoves);
             case 'hard':
-                return this.getHardMove(game, validMoves);
+                return this.getHardMoveOptimized(game, validMoves);
             default:
                 return this.getRandomMove(validMoves);
         }
     }
 
-    // 获取所有有效移动
+    // 获取所有有效移动（优化版）
     getValidMoves(game) {
         const validMoves = [];
+        const playedMoves = this.getPlayedMoves(game);
 
-        for (let row = 0; row < game.boardSize; row++) {
-            for (let col = 0; col < game.boardSize; col++) {
-                if (game.isValidMove(row, col)) {
-                    validMoves.push({ row, col });
+        // 优先考虑已下棋子周围的位置
+        const candidatePositions = new Set();
+
+        // 如果棋盘是空的，从中心附近开始
+        if (playedMoves.length === 0) {
+            const center = Math.floor(this.boardSize / 2);
+            for (let i = -2; i <= 2; i++) {
+                for (let j = -2; j <= 2; j++) {
+                    const row = center + i;
+                    const col = center + j;
+                    if (row >= 0 && row < this.boardSize && col >= 0 && col < this.boardSize) {
+                        candidatePositions.add(`${row},${col}`);
+                    }
+                }
+            }
+        } else {
+            // 收集所有已下棋子周围的位置
+            playedMoves.forEach(move => {
+                const neighbors = game.getNeighbors(move.row, move.col);
+                neighbors.forEach(neighbor => {
+                    candidatePositions.add(`${neighbor.row},${neighbor.col}`);
+                });
+            });
+        }
+
+        // 检查候选位置的合法性
+        candidatePositions.forEach(pos => {
+            const [row, col] = pos.split(',').map(Number);
+            if (game.isValidMove(row, col)) {
+                validMoves.push({ row, col });
+            }
+        });
+
+        // 如果没有找到有效的候选位置，检查整个棋盘
+        if (validMoves.length === 0) {
+            for (let row = 0; row < game.boardSize; row++) {
+                for (let col = 0; col < game.boardSize; col++) {
+                    if (game.isValidMove(row, col)) {
+                        validMoves.push({ row, col });
+                    }
                 }
             }
         }
 
         return validMoves;
+    }
+
+    // 获取已下棋子列表
+    getPlayedMoves(game) {
+        const moves = [];
+        for (let row = 0; row < game.boardSize; row++) {
+            for (let col = 0; col < game.boardSize; col++) {
+                if (game.board[row][col] !== null) {
+                    moves.push({ row, col });
+                }
+            }
+        }
+        return moves;
     }
 
     // 随机移动（简单难度）
@@ -479,7 +546,7 @@ class GoAI {
         return topMoves[randomIndex];
     }
 
-    // 高级难度AI
+    // 高级难度AI（性能优化版）
     getHardMove(game, validMoves) {
         let bestMove = null;
         let bestScore = -Infinity;
@@ -495,26 +562,402 @@ class GoAI {
         return bestMove;
     }
 
-    // 评估移动
+    // 性能优化版Hard模式
+    getHardMoveOptimized(game, validMoves) {
+        // 第一轮快速评估筛选候选移动
+        const scoredMoves = [];
+        for (const move of validMoves) {
+            const quickScore = this.quickEvaluateMove(game, move);
+            scoredMoves.push({ ...move, score: quickScore });
+        }
+
+        // 只保留前N个候选移动
+        scoredMoves.sort((a, b) => b.score - a.score);
+        const candidateMoves = scoredMoves.slice(0, Math.min(10, validMoves.length));
+
+        let bestMove = null;
+        let bestScore = -Infinity;
+
+        // 对候选移动进行深度搜索
+        for (const move of candidateMoves) {
+            // 检查是否超时
+            if (Date.now() - this.startTime > this.maxTime) {
+                break;
+            }
+
+            const score = this.minimax(game, move, this.maxDepth, false, -Infinity, Infinity);
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = move;
+            }
+        }
+
+        // 如果没有找到最佳移动，使用第一轮评估的最佳结果
+        if (!bestMove && candidateMoves.length > 0) {
+            bestMove = candidateMoves[0];
+        }
+
+        return bestMove;
+    }
+
+    // 快速评估移动（用于第一轮筛选）
+    quickEvaluateMove(game, move) {
+        let score = 0;
+
+        // 基本位置评估
+        score += this.evaluatePosition(move.row, move.col);
+
+        // 快速模式识别
+        const neighbors = game.getNeighbors(move.row, move.col);
+        const player = game.currentPlayer;
+        const opponent = player === 'black' ? 'white' : 'black';
+
+        // 检查是否能立即吃子
+        let canCapture = false;
+        neighbors.forEach(n => {
+            if (game.board[n.row][n.col] === opponent) {
+                const group = game.getGroup(n.row, n.col);
+                if (game.hasLiberties(group) && this.countGroupLiberties(game, group) === 1) {
+                    canCapture = true;
+                }
+            }
+        });
+
+        if (canCapture) score += 50; // 高优先级
+
+        // 检查是否需要救子
+        let needSave = false;
+        neighbors.forEach(n => {
+            if (game.board[n.row][n.col] === player) {
+                const group = game.getGroup(n.row, n.col);
+                if (game.hasLiberties(group) && this.countGroupLiberties(game, group) === 1) {
+                    needSave = true;
+                }
+            }
+        });
+
+        if (needSave) score += 30; // 高优先级
+
+        return score;
+    }
+
+    // 评估移动（增强版）
     evaluateMove(game, move) {
         let score = 0;
 
-        // 模拟移动
+        // 保存当前状态
         const tempBoard = game.board.map(row => [...row]);
         const tempPlayer = game.currentPlayer;
+        const tempPrisoners = { ...game.prisoners };
 
+        // 模拟移动
         game.board[move.row][move.col] = tempPlayer;
 
         // 评估提子
         const opponent = tempPlayer === 'black' ? 'white' : 'black';
-        const capturedStones = game.captureStones(opponent);
-        score += capturedStones.length * 10;
+        const capturedStones = this.simulateCaptures(game, opponent);
+        score += capturedStones.length * 15; // 提子权重增加
 
         // 评估位置价值
         score += this.evaluatePosition(move.row, move.col);
 
         // 评估安全性
         score += this.evaluateSafety(game, move);
+
+        // 评估围棋模式
+        score += this.evaluateGoPatterns(game, move);
+
+        // 评估领地潜力
+        score += this.evaluateTerritoryPotential(game, move);
+
+        // 评估连气情况
+        score += this.evaluateLiberties(game, move);
+
+        // 恢复棋盘
+        game.board = tempBoard;
+        game.prisoners = tempPrisoners;
+
+        return score;
+    }
+
+    // 模拟提子（不修改原游戏状态）
+    simulateCaptures(game, opponent) {
+        const capturedStones = [];
+
+        for (let row = 0; row < game.boardSize; row++) {
+            for (let col = 0; col < game.boardSize; col++) {
+                if (game.board[row][col] === opponent) {
+                    const group = game.getGroup(row, col);
+                    if (!game.hasLiberties(group)) {
+                        for (const stone of group) {
+                            capturedStones.push(stone);
+                        }
+                    }
+                }
+            }
+        }
+
+        return capturedStones;
+    }
+
+    // 评估围棋模式
+    evaluateGoPatterns(game, move) {
+        let score = 0;
+        const patterns = this.identifyPatterns(game, move);
+
+        // 奖励好的模式
+        if (patterns.eye) score += 20; // 做眼
+        if (patterns.connection) score += 10; // 连接
+        if (patterns.cut) score += 15; // 切断
+        if (patterns.atari) score += 25; // 打吃
+        if (patterns.save) score += 20; // 救子
+        if (patterns.extension) score += 8; // 展开
+        if (patterns.invasion) score += 12; // 打入
+        if (patterns.reduce) score += 10; // 消减
+
+        // 惩罚坏的模式
+        if (patterns.badShape) score -= 15; // 恶形
+        if (patterns.overconcentrated) score -= 10; // 过度集中
+
+        return score;
+    }
+
+    // 识别围棋模式
+    identifyPatterns(game, move) {
+        const patterns = {
+            eye: false,
+            connection: false,
+            cut: false,
+            atari: false,
+            save: false,
+            extension: false,
+            invasion: false,
+            reduce: false,
+            badShape: false,
+            overconcentrated: false
+        };
+
+        const player = game.currentPlayer;
+        const opponent = player === 'black' ? 'white' : 'black';
+        const neighbors = game.getNeighbors(move.row, move.col);
+
+        // 检查做眼模式
+        const friendlyNeighbors = neighbors.filter(n => game.board[n.row][n.col] === player).length;
+        const emptyNeighbors = neighbors.filter(n => game.board[n.row][n.col] === null).length;
+        if (friendlyNeighbors >= 3 && emptyNeighbors >= 1) {
+            patterns.eye = true;
+        }
+
+        // 检查连接模式
+        const potentialConnections = neighbors.filter(n => game.board[n.row][n.col] === player).length;
+        if (potentialConnections >= 2) {
+            patterns.connection = true;
+        }
+
+        // 检查切断模式
+        const enemyNeighbors = neighbors.filter(n => game.board[n.row][n.col] === opponent).length;
+        const enemyGroups = this.getEnemyGroupsAround(game, move);
+        if (enemyGroups >= 2) {
+            patterns.cut = true;
+        }
+
+        // 检查打吃模式
+        const threatenedGroups = this.getThreatenedGroups(game, move);
+        if (threatenedGroups.length > 0) {
+            patterns.atari = true;
+        }
+
+        // 检查救子模式
+        const friendlyGroupsInDanger = this.getFriendlyGroupsInDanger(game, move);
+        if (friendlyGroupsInDanger.length > 0) {
+            patterns.save = true;
+        }
+
+        // 检查展开模式
+        const boardFillRate = game.calculateBoardFillPercentage();
+        if (boardFillRate < 0.3 && emptyNeighbors >= 2) {
+            patterns.extension = true;
+        }
+
+        // 检查恶形
+        if (friendlyNeighbors === 1 && emptyNeighbors <= 2) {
+            patterns.badShape = true;
+        }
+
+        // 检查过度集中
+        const friendlyCount = this.countFriendlyStonesAround(game, move, 3);
+        if (friendlyCount > 6) {
+            patterns.overconcentrated = true;
+        }
+
+        return patterns;
+    }
+
+    // 获取周围的敌方棋子群数量
+    getEnemyGroupsAround(game, move) {
+        const opponent = game.currentPlayer === 'black' ? 'white' : 'black';
+        const neighbors = game.getNeighbors(move.row, move.col);
+        const groups = new Set();
+
+        neighbors.forEach(n => {
+            if (game.board[n.row][n.col] === opponent) {
+                const group = game.getGroup(n.row, n.col);
+                groups.add(group.map(s => `${s.row},${s.col}`).join(','));
+            }
+        });
+
+        return groups.size;
+    }
+
+    // 获取受到威胁的敌方棋子群
+    getThreatenedGroups(game, move) {
+        const opponent = game.currentPlayer === 'black' ? 'white' : 'black';
+        const neighbors = game.getNeighbors(move.row, move.col);
+        const threatenedGroups = [];
+
+        neighbors.forEach(n => {
+            if (game.board[n.row][n.col] === opponent) {
+                const group = game.getGroup(n.row, n.col);
+                // 模拟下子后的情况
+                const tempBoard = game.board[n.row][n.col];
+                game.board[move.row][move.col] = game.currentPlayer;
+
+                if (!game.hasLiberties(group)) {
+                    threatenedGroups.push(group);
+                }
+
+                game.board[move.row][move.col] = null;
+                game.board[n.row][n.col] = tempBoard;
+            }
+        });
+
+        return threatenedGroups;
+    }
+
+    // 获取危险的友方棋子群
+    getFriendlyGroupsInDanger(game, move) {
+        const player = game.currentPlayer;
+        const neighbors = game.getNeighbors(move.row, move.col);
+        const endangeredGroups = [];
+
+        neighbors.forEach(n => {
+            if (game.board[n.row][n.col] === player) {
+                const group = game.getGroup(n.row, n.col);
+                if (game.hasLiberties(group) && this.countGroupLiberties(game, group) <= 2) {
+                    endangeredGroups.push(group);
+                }
+            }
+        });
+
+        return endangeredGroups;
+    }
+
+    // 计算棋子群的气数
+    countGroupLiberties(game, group) {
+        const liberties = new Set();
+
+        group.forEach(stone => {
+            const neighbors = game.getNeighbors(stone.row, stone.col);
+            neighbors.forEach(n => {
+                if (game.board[n.row][n.col] === null) {
+                    liberties.add(`${n.row},${n.col}`);
+                }
+            });
+        });
+
+        return liberties.size;
+    }
+
+    // 统计周围的友方棋子数
+    countFriendlyStonesAround(game, move, distance) {
+        let count = 0;
+        const player = game.currentPlayer;
+
+        for (let dr = -distance; dr <= distance; dr++) {
+            for (let dc = -distance; dc <= distance; dc++) {
+                if (dr === 0 && dc === 0) continue;
+                const row = move.row + dr;
+                const col = move.col + dc;
+                if (row >= 0 && row < game.boardSize && col >= 0 && col < game.boardSize) {
+                    if (game.board[row][col] === player) {
+                        count++;
+                    }
+                }
+            }
+        }
+
+        return count;
+    }
+
+    // 评估领地潜力
+    evaluateTerritoryPotential(game, move) {
+        let score = 0;
+        const player = game.currentPlayer;
+        const center = Math.floor(this.boardSize / 2);
+        const distanceFromCenter = Math.abs(move.row - center) + Math.abs(move.col - center);
+
+        // 早期偏好中心附近建立势力
+        const boardFillRate = game.calculateBoardFillPercentage();
+        if (boardFillRate < 0.2) {
+            score += (10 - distanceFromCenter) * 2;
+        }
+
+        // 中期偏好扩张影响力
+        if (boardFillRate >= 0.2 && boardFillRate < 0.5) {
+            const influence = this.calculateInfluence(game, move);
+            score += influence * 3;
+        }
+
+        return score;
+    }
+
+    // 计算影响力
+    calculateInfluence(game, move) {
+        let influence = 0;
+        const player = game.currentPlayer;
+        const checkDistance = 3;
+
+        for (let dr = -checkDistance; dr <= checkDistance; dr++) {
+            for (let dc = -checkDistance; dc <= checkDistance; dc++) {
+                const row = move.row + dr;
+                const col = move.col + dc;
+                if (row >= 0 && row < game.boardSize && col >= 0 && col < game.boardSize) {
+                    const distance = Math.abs(dr) + Math.abs(dc);
+                    if (game.board[row][col] === player) {
+                        influence += (checkDistance - distance + 1);
+                    } else if (game.board[row][col] !== null) {
+                        influence -= (checkDistance - distance + 1) * 0.5;
+                    }
+                }
+            }
+        }
+
+        return influence;
+    }
+
+    // 评估连气情况
+    evaluateLiberties(game, move) {
+        let score = 0;
+        const player = game.currentPlayer;
+
+        // 创建临时棋盘来评估这步棋的效果
+        const tempBoard = game.board.map(row => [...row]);
+        game.board[move.row][move.col] = player;
+
+        // 检查这步棋自身的气
+        const group = game.getGroup(move.row, move.col);
+        const liberties = this.countGroupLiberties(game, group);
+        score += liberties * 5;
+
+        // 检查这步棋是否能增加友邻棋子的气
+        const neighbors = game.getNeighbors(move.row, move.col);
+        neighbors.forEach(n => {
+            if (game.board[n.row][n.col] === player) {
+                const neighborGroup = game.getGroup(n.row, n.col);
+                const neighborLiberties = this.countGroupLiberties(game, neighborGroup);
+                score += neighborLiberties * 2;
+            }
+        });
 
         // 恢复棋盘
         game.board = tempBoard;
@@ -569,42 +1012,80 @@ class GoAI {
         return score;
     }
 
-    // Minimax算法
+    // Minimax算法（优化版）
     minimax(game, move, depth, isMaximizing, alpha, beta) {
-        // 这里实现简化的minimax算法
-        // 由于围棋的复杂性，实际实现会更复杂
-
-        if (depth === 0) {
-            return this.evaluatePosition(move.row, move.col);
+        // 检查超时
+        if (Date.now() - this.startTime > this.maxTime) {
+            return this.quickEvaluateMove(game, move);
         }
 
-        // 模拟移动
+        this.nodeCount++;
+
+        // 终止条件
+        if (depth === 0) {
+            return this.evaluateMove(game, move);
+        }
+
+        // 保存当前状态
         const tempBoard = game.board.map(row => [...row]);
         const tempPlayer = game.currentPlayer;
 
+        // 模拟移动
         game.board[move.row][move.col] = tempPlayer;
+        game.currentPlayer = tempPlayer === 'black' ? 'white' : 'black';
 
-        const validMoves = this.getValidMoves(game);
+        // 处理提子
+        const opponent = tempPlayer;
+        const capturedStones = this.simulateCaptures(game, opponent);
+
+        let validMoves;
+        // 优化：在深度较大时限制搜索范围
+        if (depth >= 4) {
+            validMoves = this.getValidMoves(game).slice(0, 15); // 限制候选移动数量
+        } else {
+            validMoves = this.getValidMoves(game);
+        }
+
+        // 如果没有有效移动，返回当前评估
+        if (validMoves.length === 0) {
+            game.board = tempBoard;
+            game.currentPlayer = tempPlayer;
+            return this.evaluateMove(game, move);
+        }
 
         if (isMaximizing) {
             let maxScore = -Infinity;
             for (const nextMove of validMoves) {
+                // 检查超时
+                if (Date.now() - this.startTime > this.maxTime) {
+                    break;
+                }
+
                 const score = this.minimax(game, nextMove, depth - 1, false, alpha, beta);
                 maxScore = Math.max(maxScore, score);
                 alpha = Math.max(alpha, score);
-                if (beta <= alpha) break;
+                if (beta <= alpha) break; // Alpha-Beta剪枝
             }
+            // 恢复状态
             game.board = tempBoard;
+            game.currentPlayer = tempPlayer;
             return maxScore;
         } else {
             let minScore = Infinity;
             for (const nextMove of validMoves) {
+                // 检查超时
+                if (Date.now() - this.startTime > this.maxTime) {
+                    break;
+                }
+
                 const score = this.minimax(game, nextMove, depth - 1, true, alpha, beta);
                 minScore = Math.min(minScore, score);
                 beta = Math.min(beta, score);
-                if (beta <= alpha) break;
+                if (beta <= alpha) break; // Alpha-Beta剪枝
             }
+            // 恢复状态
             game.board = tempBoard;
+            game.currentPlayer = tempPlayer;
             return minScore;
         }
     }
@@ -1370,32 +1851,84 @@ class UIManager {
     makeAIMove() {
         if (!this.game || !this.ai || this.game.gameOver) return;
 
-        const move = this.ai.getNextMove(this.game);
-        if (move) {
-            const result = this.game.placeStone(move.row, move.col);
-            if (result.success) {
-                this.drawBoard();
-                this.updateGameInfo();
+        // 显示AI思考提示
+        this.showAIThinking();
 
-                // 播放音效
-                if (this.dataManager.getSettings().sound) {
-                    if (result.captured.length > 0) {
-                        this.playSound('capture'); // 吃子音效
-                        console.log(`AI吃掉了 ${result.captured.length} 个棋子！`);
-                    } else {
-                        this.playSound('placeStone'); // 普通落子音效
+        // 使用异步方式让UI有时间更新
+        setTimeout(() => {
+            const move = this.ai.getNextMove(this.game);
+
+            // 隐藏AI思考提示
+            this.hideAIThinking();
+
+            if (move) {
+                const result = this.game.placeStone(move.row, move.col);
+                if (result.success) {
+                    this.drawBoard();
+                    this.updateGameInfo();
+
+                    // 播放音效
+                    if (this.dataManager.getSettings().sound) {
+                        if (result.captured.length > 0) {
+                            this.playSound('capture'); // 吃子音效
+                            console.log(`AI吃掉了 ${result.captured.length} 个棋子！`);
+                        } else {
+                            this.playSound('placeStone'); // 普通落子音效
+                        }
                     }
-                }
 
-                // 检查游戏结束
+                    // 检查游戏结束
+                    this.checkGameEnd();
+                }
+            } else {
+                // AI没有有效移动，选择pass
+                this.game.pass();
+                this.updateGameInfo();
                 this.checkGameEnd();
             }
-        } else {
-            // AI没有有效移动，选择pass
-            this.game.pass();
-            this.updateGameInfo();
-            this.checkGameEnd();
+        }, 100); // 短暂延迟让UI更新
+    }
+
+    // 显示AI思考提示
+    showAIThinking() {
+        const thinkingDiv = document.getElementById('ai-thinking');
+        const timeSpan = document.getElementById('thinking-time');
+        const progressFill = document.getElementById('progress-fill');
+
+        thinkingDiv.style.display = 'block';
+
+        // 重置计时器和进度
+        let startTime = Date.now();
+        let elapsedTime = 0;
+
+        // 更新思考时间
+        this.thinkingTimer = setInterval(() => {
+            elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+            timeSpan.textContent = elapsedTime;
+
+            // 更新进度条（基于最大思考时间）
+            const maxTime = this.ai.maxTime / 1000; // 转换为秒
+            const progress = Math.min((elapsedTime / maxTime) * 100, 100);
+            progressFill.style.width = progress + '%';
+        }, 100);
+    }
+
+    // 隐藏AI思考提示
+    hideAIThinking() {
+        const thinkingDiv = document.getElementById('ai-thinking');
+
+        if (this.thinkingTimer) {
+            clearInterval(this.thinkingTimer);
+            this.thinkingTimer = null;
         }
+
+        thinkingDiv.style.display = 'none';
+
+        // 重置进度条
+        const progressFill = document.getElementById('progress-fill');
+        const timeSpan = document.getElementById('thinking-time');
+        progressFill.style.width = '0%';
+        timeSpan.textContent = '0';
     }
 
     undoMove() {
