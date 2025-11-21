@@ -36,7 +36,7 @@ class GoGame {
         this.territory = { black: 0, white: 0 };
     }
 
-    // 放置棋子
+    // 放置棋子（简化版，因为isValidMove已包含自杀检查）
     placeStone(row, col) {
         if (this.gameOver) return { success: false, captured: [] };
         if (!this.isValidMove(row, col)) return { success: false, captured: [] };
@@ -48,12 +48,6 @@ class GoGame {
         // 提取对手的死子
         const opponent = this.currentPlayer === 'black' ? 'white' : 'black';
         const capturedStones = this.captureStones(opponent);
-
-        // 检查自杀规则
-        if (this.isSuicide(row, col) && capturedStones.length === 0) {
-            this.board[row][col] = null;
-            return { success: false, captured: [] };
-        }
 
         // 检查劫争
         this.checkKo(row, col, capturedStones);
@@ -76,7 +70,7 @@ class GoGame {
         return { success: true, captured: capturedStones };
     }
 
-    // 检查移动是否有效
+    // 检查移动是否有效（增强版，包含自杀检查）
     isValidMove(row, col) {
         // 检查边界
         if (row < 0 || row >= this.boardSize || col < 0 || col >= this.boardSize) {
@@ -93,7 +87,55 @@ class GoGame {
             return false;
         }
 
-        return true;
+        // 检查是否为自杀（模拟落子）
+        return !this.wouldBeSuicide(row, col, this.currentPlayer);
+    }
+
+    // 检查落子是否为自杀
+    wouldBeSuicide(row, col, player) {
+        // 临时放置棋子
+        this.board[row][col] = player;
+
+        // 模拟提子
+        const opponent = player === 'black' ? 'white' : 'black';
+        const capturedStones = this.simulateCapturesForSuicideCheck(opponent);
+
+        // 获取当前棋子所在的群组
+        const group = this.getGroup(row, col);
+        const hasLiberties = this.hasLiberties(group);
+
+        // 恢复棋盘
+        this.board[row][col] = null;
+
+        // 如果没有气且没有提子，则是自杀
+        return !hasLiberties && capturedStones.length === 0;
+    }
+
+    // 模拟提子（用于自杀检查）
+    simulateCapturesForSuicideCheck(opponent) {
+        const capturedStones = [];
+
+        for (let row = 0; row < this.boardSize; row++) {
+            for (let col = 0; col < this.boardSize; col++) {
+                if (this.board[row][col] === opponent) {
+                    const group = this.getGroup(row, col);
+                    if (!this.hasLiberties(group)) {
+                        for (const stone of group) {
+                            // 模拟移除棋子
+                            this.board[stone.row][stone.col] = null;
+                            capturedStones.push(stone);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 恢复被移除的棋子
+        for (const stone of capturedStones) {
+            this.board[stone.row][stone.col] = opponent;
+        }
+
+        return capturedStones;
     }
 
     // 获取棋子的邻接点
@@ -174,7 +216,7 @@ class GoGame {
         return capturedStones;
     }
 
-    // 检查是否是自杀
+    // 检查是否是自杀（保留用于其他地方）
     isSuicide(row, col) {
         const color = this.board[row][col];
         const group = this.getGroup(row, col);
@@ -457,7 +499,7 @@ class GoAI {
         }
     }
 
-    // 获取所有有效移动（优化版）
+    // 获取所有有效移动（优化版，使用增强的isValidMove）
     getValidMoves(game) {
         const validMoves = [];
         const playedMoves = this.getPlayedMoves(game);
@@ -487,7 +529,7 @@ class GoAI {
             });
         }
 
-        // 检查候选位置的合法性
+        // 检查候选位置的合法性（现在isValidMove已经包含自杀检查）
         candidatePositions.forEach(pos => {
             const [row, col] = pos.split(',').map(Number);
             if (game.isValidMove(row, col)) {
